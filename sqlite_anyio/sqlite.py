@@ -11,23 +11,14 @@ from anyio import CapacityLimiter, to_thread
 
 
 class Connection:
-    _cursor: Cursor | None
-
     def __init__(self, _real_connection: sqlite3.Connection) -> None:
         self._real_connection = _real_connection
         self._limiter = CapacityLimiter(1)
-        self._cursor = None
 
     async def __aenter__(self) -> Connection:
-        if self._cursor is None:
-            self._cursor = await self.cursor()
-
         return self
 
     async def __aexit__(self, exc_type, exc_value, exc_tb):
-        if self._cursor is not None:
-            await self._cursor.close()
-
         await self.close()
 
     @wraps(sqlite3.Connection.close)
@@ -47,9 +38,8 @@ class Connection:
         return Cursor(real_cursor, self._limiter)
 
     async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
-        if self._cursor is None:
-            self._cursor = await self.cursor()
-        return await self._cursor.execute(sql, parameters)
+        cursor = await self.cursor()
+        return await cursor.execute(sql, parameters)
 
 
 class Cursor:
