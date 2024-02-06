@@ -15,12 +15,6 @@ class Connection:
         self._real_connection = _real_connection
         self._limiter = CapacityLimiter(1)
 
-    async def __aenter__(self) -> Connection:
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, exc_tb):
-        await self.close()
-
     @wraps(sqlite3.Connection.close)
     async def close(self):
         return await to_thread.run_sync(self._real_connection.close, limiter=self._limiter)
@@ -37,21 +31,11 @@ class Connection:
         real_cursor = await to_thread.run_sync(self._real_connection.cursor, factory, limiter=self._limiter)
         return Cursor(real_cursor, self._limiter)
 
-    async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
-        cursor = await self.cursor()
-        return await cursor.execute(sql, parameters)
-
 
 class Cursor:
     def __init__(self, real_cursor: sqlite3.Cursor, limiter: CapacityLimiter) -> None:
         self._real_cursor = real_cursor
         self._limiter = limiter
-
-    async def __aenter__(self) -> Cursor:
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, exc_tb):
-        await self.close()
 
     @property
     def description(self) -> Any:
