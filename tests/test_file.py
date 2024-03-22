@@ -1,3 +1,4 @@
+import anyio
 import pytest
 import sqlite3
 import sqlite_anyio
@@ -165,3 +166,8 @@ async def test_close():
     with pytest.raises(sqlite3.ProgrammingError) as excinfo:
         await pytest.acon.cursor()
     assert str(excinfo.value) == "Cannot operate on a closed database."
+
+    # check that there is no lock on the file, especially for Windows where there can be:
+    # PermissionError: [WinError 32] The process cannot access the file because it is being used by another process
+    await anyio.Path(pytest.db_path).rename(pytest.db_path.with_suffix(".keep"))
+    await anyio.Path(pytest.adb_path).rename(pytest.adb_path.with_suffix(".keep"))
