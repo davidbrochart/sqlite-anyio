@@ -46,6 +46,10 @@ Issues = "https://github.com/davidbrochart/sqlite-anyio/issues"
 [tool.hatch.version]
 path = "sqlite_anyio/__init__.py"
 
+[tool.hatch.build.targets.wheel]
+ignore-vcs = true
+packages = ["sqlite_anyio"]
+
 [tool.coverage.run]
 source = ["sqlite_anyio", "tests"]
 
