@@ -5,11 +5,8 @@ import pytest
 import sqlite_anyio
 
 
-pytestmark = pytest.mark.anyio
-
-
-async def test_context_manager_commit():
-    mem_uri = "file:mem0?mode=memory&cache=shared"
+async def test_context_manager_commit(anyio_backend):
+    mem_uri = f"file:{anyio_backend}_mem0?mode=memory&cache=shared"
     acon0 = await sqlite_anyio.connect(mem_uri, uri=True)
     acur0 = await acon0.cursor()
     async with acon0:
@@ -22,8 +19,8 @@ async def test_context_manager_commit():
     assert await acur1.fetchone() == ("Python",)
 
 
-async def test_context_manager_rollback():
-    mem_uri = "file:mem1?mode=memory&cache=shared"
+async def test_context_manager_rollback(anyio_backend):
+    mem_uri = f"file:{anyio_backend}_mem1?mode=memory&cache=shared"
     acon0 = await sqlite_anyio.connect(mem_uri, uri=True)
     acur0 = await acon0.cursor()
     with pytest.raises(RuntimeError):
@@ -38,9 +35,9 @@ async def test_context_manager_rollback():
     assert await acur1.fetchone() is None
 
 
-async def test_exception_logger(caplog):
+async def test_exception_logger(anyio_backend, caplog):
     caplog.set_level(logging.INFO)
-    mem_uri = "file:mem2?mode=memory&cache=shared"
+    mem_uri = f"file:{anyio_backend}_mem2?mode=memory&cache=shared"
     log = logging.getLogger("logger")
     acon0 = await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log)
     acur0 = await acon0.cursor()
