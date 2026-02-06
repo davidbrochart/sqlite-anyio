@@ -18,6 +18,18 @@ async def test_context_manager_commit(anyio_backend):
     await acur1.execute("SELECT name FROM lang")
     assert await acur1.fetchone() == ("Python",)
 
+async def test_context_manager_execute(anyio_backend):
+    mem_uri = f"file:{anyio_backend}_mem0?mode=memory&cache=shared"
+    acon0 = await sqlite_anyio.connect(mem_uri, uri=True)
+    async with acon0:
+        await acon0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+        await acon0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
+
+    acon1 = await sqlite_anyio.connect(mem_uri, uri=True)
+    acur1 = await acon1.cursor()
+    await acur1.execute("SELECT name FROM lang")
+    assert await acur1.fetchone() == ("Python",)
+
 
 async def test_context_manager_rollback(anyio_backend):
     mem_uri = f"file:{anyio_backend}_mem1?mode=memory&cache=shared"
