@@ -17,6 +17,7 @@ async def test_context_manager_commit(anyio_backend):
     acur1 = await acon1.cursor()
     await acur1.execute("SELECT name FROM lang")
     assert await acur1.fetchone() == ("Python",)
+    await acur1.execute("DROP TABLE IF EXISTS lang;")
 
 async def test_context_manager_execute(anyio_backend):
     mem_uri = f"file:{anyio_backend}_mem0?mode=memory&cache=shared"
@@ -29,6 +30,7 @@ async def test_context_manager_execute(anyio_backend):
     acur1 = await acon1.cursor()
     await acur1.execute("SELECT name FROM lang")
     assert await acur1.fetchone() == ("Python",)
+    await acur1.execute("DROP TABLE IF EXISTS lang;")
 
 
 async def test_context_manager_rollback(anyio_backend):
@@ -45,6 +47,7 @@ async def test_context_manager_rollback(anyio_backend):
     acur1 = await acon1.cursor()
     await acur1.execute("SELECT name FROM lang")
     assert await acur1.fetchone() is None
+    await acur1.execute("DROP TABLE IF EXISTS lang;")
 
 
 async def test_exception_logger(anyio_backend, caplog):
@@ -59,3 +62,4 @@ async def test_exception_logger(anyio_backend, caplog):
         raise RuntimeError("foo")
 
     assert "SQLite exception" in caplog.text
+    await acur0.execute("DROP TABLE IF EXISTS lang;")
