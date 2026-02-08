@@ -45,6 +45,12 @@ class Connection:
         if self._exception_handler is not None:
             exception_handled = self._exception_handler(exc_type, exc_val, exc_tb, self._log)
         return exception_handled
+    
+    async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
+        real_cursor = await to_thread.run_sync(self._real_connection.execute, sql, parameters, limiter=self._limiter)
+        return Cursor(real_cursor, self._limiter)
+    
+    update_wrapper(execute, sqlite3.Connection.execute)
 
     async def close(self):
         return await to_thread.run_sync(self._real_connection.close, limiter=self._limiter)
