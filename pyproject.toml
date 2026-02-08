@@ -1,12 +1,12 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build"]
+build-backend = "uv_build"
 
 [project]
 name = "sqlite-anyio"
 description = "Asynchronous client for SQLite using AnyIO"
 readme = "README.md"
-version = "0.2.4"
+version = "0.2.5"
 authors = [
     {name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"},
     {name = "David Brochart", email = "david.brochart@gmail.com"},
@@ -42,13 +42,6 @@ test = [
 [project.urls]
 Source = "https://github.com/davidbrochart/sqlite-anyio"
 Issues = "https://github.com/davidbrochart/sqlite-anyio/issues"
-
-[tool.hatch.version]
-path = "sqlite_anyio/__init__.py"
-
-[tool.hatch.build.targets.wheel]
-ignore-vcs = true
-packages = ["sqlite_anyio"]
 
 [tool.coverage.run]
 source = ["sqlite_anyio", "tests"]
