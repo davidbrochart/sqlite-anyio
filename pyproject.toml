@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "sqlite-anyio"
 description = "Asynchronous client for SQLite using AnyIO"
 readme = "README.md"
-version = "0.2.3"
+version = "0.2.4"
 authors = [
     {name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"},
     {name = "David Brochart", email = "david.brochart@gmail.com"},
