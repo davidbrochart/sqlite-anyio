@@ -25,16 +25,16 @@ PosArgsT = TypeVarTuple("PosArgsT")
 
 
 async def _interruptible_dispatch(
+    self: Connection | Cursor,
     func: Callable[[Unpack[PosArgsT]], T_Retval],
-    *args: Unpack[PosArgsT],
-    limiter: anyio.CapacityLimiter | None = None,
+    *args: Unpack[PosArgsT]
 ) -> T_Retval:
-    # func is always a bound method of a connection or cursor
-    # dynamically grab the connection via __self__
-    try:
-        real_connection = func.__self__.connection
-    except AttributeError:
-        real_connection = func.__self__
+    if isinstance(self, Connection):
+        real_connection = self._real_connection
+    elif isinstance(self, Cursor):
+        real_connection = self._real_cursor.connection
+    else:
+        raise AssertionError("Unknown type:", self)
 
     ev = anyio.Event()
     lock = threading.Lock()
@@ -76,7 +76,7 @@ async def _interruptible_dispatch(
     try:
         async with anyio.create_task_group() as g:
             g.start_soon(cancel_detector)
-            retval = await to_thread.run_sync(guard_interrupt, limiter=limiter)
+            retval = await to_thread.run_sync(guard_interrupt, limiter=self._limiter)
             ev.set()
     except* Exception as e:
         if len(e.exceptions) == 1:
@@ -121,7 +121,7 @@ class Connection:
         return exception_handled
 
     async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
-        real_cursor = await _interruptible_dispatch(self._real_connection.execute, sql, parameters, limiter=self._limiter)
+        real_cursor = await _interruptible_dispatch(self, self._real_connection.execute, sql, parameters)
         return Cursor(real_cursor, self._limiter)
 
     update_wrapper(execute, sqlite3.Connection.execute)
@@ -133,7 +133,7 @@ class Connection:
     update_wrapper(close, sqlite3.Connection.close)
 
     async def commit(self):
-        return await _interruptible_dispatch(self._real_connection.commit, limiter=self._limiter)
+        return await _interruptible_dispatch(self, self._real_connection.commit)
 
     update_wrapper(commit, sqlite3.Connection.commit)
 
@@ -172,35 +172,35 @@ class Cursor:
     update_wrapper(close, sqlite3.Cursor.close)
 
     async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
-        real_cursor = await _interruptible_dispatch(self._real_cursor.execute, sql, parameters, limiter=self._limiter)
+        real_cursor = await _interruptible_dispatch(self, self._real_cursor.execute, sql, parameters)
         return Cursor(real_cursor, self._limiter)
 
     update_wrapper(execute, sqlite3.Cursor.execute)
 
     async def executemany(self, sql: str, parameters: Sequence[Any], /) -> Cursor:
-        real_cursor = await _interruptible_dispatch(self._real_cursor.executemany, sql, parameters, limiter=self._limiter)
+        real_cursor = await _interruptible_dispatch(self, self._real_cursor.executemany, sql, parameters)
         return Cursor(real_cursor, self._limiter)
 
     update_wrapper(executemany, sqlite3.Cursor.executemany)
 
     async def executescript(self, sql_script: str, /) -> Cursor:
-        real_cursor = await _interruptible_dispatch(self._real_cursor.executescript, sql_script, limiter=self._limiter)
+        real_cursor = await _interruptible_dispatch(self, self._real_cursor.executescript, sql_script)
         return Cursor(real_cursor, self._limiter)
 
     update_wrapper(executescript, sqlite3.Cursor.executescript)
 
     async def fetchone(self) -> tuple[Any, ...] | None:
-        return await _interruptible_dispatch(self._real_cursor.fetchone, limiter=self._limiter)
+        return await _interruptible_dispatch(self, self._real_cursor.fetchone)
 
     update_wrapper(fetchone, sqlite3.Cursor.fetchone)
 
     async def fetchmany(self, size: int) -> list[tuple[Any, ...]]:
-        return await _interruptible_dispatch(self._real_cursor.fetchmany, size, limiter=self._limiter)
+        return await _interruptible_dispatch(self, self._real_cursor.fetchmany, size)
 
     update_wrapper(fetchmany, sqlite3.Cursor.fetchmany)
 
     async def fetchall(self) -> list[tuple[Any, ...]]:
-        return await _interruptible_dispatch(self._real_cursor.fetchall, limiter=self._limiter)
+        return await _interruptible_dispatch(self, self._real_cursor.fetchall)
 
     update_wrapper(fetchall, sqlite3.Cursor.fetchall)
 
