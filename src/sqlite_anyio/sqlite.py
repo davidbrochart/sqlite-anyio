@@ -15,9 +15,9 @@ import anyio
 from anyio import to_thread, from_thread
 
 if sys.version_info >= (3, 11):
-
     from typing import TypeVarTuple, Unpack
 else:
+    from exceptiongroup import BaseExceptionGroup
     from typing_extensions import TypeVarTuple, Unpack
 
 T_Retval = TypeVar("T_Retval")
@@ -41,7 +41,6 @@ async def _interruptible_dispatch(
     need_interrupt = False
 
     async def cancel_detector() -> None:
-        nonlocal need_interrupt
         try:
             await ev.wait()
         except anyio.get_cancelled_exc_class():
@@ -78,9 +77,10 @@ async def _interruptible_dispatch(
             g.start_soon(cancel_detector)
             retval = await to_thread.run_sync(guard_interrupt, limiter=self._limiter)
             ev.set()
-    except* Exception as e:
-        if len(e.exceptions) == 1:
-            raise e.exceptions[0]
+    except BaseExceptionGroup as eg:
+        if len(eg.exceptions) == 1:
+            if isinstance(eg.exceptions[0], Exception):
+                raise eg.exceptions[0]
         raise
 
     return retval
