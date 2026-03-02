@@ -54,7 +54,7 @@ class Connection:
 
     async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
         real_cursor = await to_thread.run_sync(self._real_connection.execute, sql, parameters, limiter=self._limiter)
-        return Cursor(real_cursor, self._limiter)
+        return Cursor(real_cursor, self._limiter, self._exception_handler, self._log)
 
     update_wrapper(execute, sqlite3.Connection.execute)
 
@@ -75,13 +75,21 @@ class Connection:
 
     async def cursor(self, factory: Callable[[sqlite3.Connection], sqlite3.Cursor] = sqlite3.Cursor) -> Cursor:
         real_cursor = await to_thread.run_sync(self._real_connection.cursor, factory, limiter=self._limiter)
-        return Cursor(real_cursor, self._limiter)
+        return Cursor(real_cursor, self._limiter, self._exception_handler, self._log)
 
 
 class Cursor:
-    def __init__(self, real_cursor: sqlite3.Cursor, limiter: CapacityLimiter) -> None:
+    def __init__(
+        self,
+        real_cursor: sqlite3.Cursor,
+        limiter: CapacityLimiter,
+        _exception_handler: Callable[[type[BaseException], BaseException, TracebackType, Logger], bool] | None,
+        _log: Logger,
+    ) -> None:
         self._real_cursor = real_cursor
         self._limiter = limiter
+        self._exception_handler = _exception_handler
+        self._log = _log
 
     @property
     def description(self) -> Any:
@@ -95,6 +103,27 @@ class Cursor:
     def arraysize(self) -> int:
         return self._real_cursor.arraysize
 
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        await self.close()
+        if exc_val is None:
+            return None
+
+        assert exc_type is not None
+        assert exc_val is not None
+        assert exc_tb is not None
+        exception_handled = False
+        if self._exception_handler is not None:
+            exception_handled = self._exception_handler(exc_type, exc_val, exc_tb, self._log)
+        return exception_handled
+
     async def close(self) -> None:
         await to_thread.run_sync(self._real_cursor.close, limiter=self._limiter)
 
@@ -102,19 +131,19 @@ class Cursor:
 
     async def execute(self, sql: str, parameters: Sequence[Any] = (), /) -> Cursor:
         real_cursor = await to_thread.run_sync(self._real_cursor.execute, sql, parameters, limiter=self._limiter)
-        return Cursor(real_cursor, self._limiter)
+        return Cursor(real_cursor, self._limiter, self._exception_handler, self._log)
 
     update_wrapper(execute, sqlite3.Cursor.execute)
 
     async def executemany(self, sql: str, parameters: Sequence[Any], /) -> Cursor:
         real_cursor = await to_thread.run_sync(self._real_cursor.executemany, sql, parameters, limiter=self._limiter)
-        return Cursor(real_cursor, self._limiter)
+        return Cursor(real_cursor, self._limiter, self._exception_handler, self._log)
 
     update_wrapper(executemany, sqlite3.Cursor.executemany)
 
     async def executescript(self, sql_script: str, /) -> Cursor:
         real_cursor = await to_thread.run_sync(self._real_cursor.executescript, sql_script, limiter=self._limiter)
-        return Cursor(real_cursor, self._limiter)
+        return Cursor(real_cursor, self._limiter, self._exception_handler, self._log)
 
     update_wrapper(executescript, sqlite3.Cursor.executescript)
 
