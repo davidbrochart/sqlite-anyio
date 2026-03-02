@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = ["connect", "Connection", "Cursor"]
 
 import sqlite3
+import sys
 from collections.abc import Callable, Sequence
 from functools import partial, update_wrapper
 from logging import Logger, getLogger
@@ -10,6 +11,11 @@ from types import TracebackType
 from typing import Any
 
 from anyio import CapacityLimiter, to_thread
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 class Connection:
@@ -24,7 +30,7 @@ class Connection:
         self._log = _log or getLogger(__name__)
         self._limiter = CapacityLimiter(1)
 
-    async def __aenter__(self) -> Connection:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(
