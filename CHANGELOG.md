@@ -1,5 +1,9 @@
 # Version history
 
+## 0.2.8
+
+- Return self instead of new cursor.
+
 ## 0.2.7
 
 - Add `Cursor` async context manager that closes the cursor on exit.
