@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "sqlite-anyio"
 description = "Asynchronous client for SQLite using AnyIO"
 readme = "README.md"
-version = "0.2.5"
+version = "0.2.8"
 authors = [
     {name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"},
     {name = "David Brochart", email = "david.brochart@gmail.com"},
@@ -29,6 +29,7 @@ classifiers = [
 requires-python = ">= 3.10"
 dependencies = [
     "anyio >=4.0,<5.0",
+    "typing-extensions >=4.15.0",
 ]
 
 [dependency-groups]
