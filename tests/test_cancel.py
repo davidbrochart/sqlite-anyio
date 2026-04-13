@@ -1,4 +1,3 @@
-import anyio
 import pytest
 import sqlite3
 
@@ -15,7 +14,7 @@ async def acon():
     return await sqlite_anyio.connect(":memory:")
 
 
-async def test_connection_and_close(tmp_path_factory):
+async def test_connection_and_close(tmp_path_factory, monkeypatch):
     dir_path = tmp_path_factory.mktemp("sqlite_cancel")
     adb_path = dir_path / "asqlite_cancel.db"
 
@@ -28,9 +27,18 @@ async def test_connection_and_close(tmp_path_factory):
     assert not adb_path.exists()
     assert acon is None
 
-    with move_on_after(0.0001) as c:
-        acon = await sqlite_anyio.connect(adb_path)
-    # assert c.cancel_called
+    from sqlite3 import connect
+    from time import sleep
+
+    def slow_connect(*args, **kwargs):
+        sleep(0.01)
+        return connect(*args, **kwargs)
+
+    with monkeypatch.context() as m:
+        m.setattr(sqlite3, "connect", slow_connect)
+        with move_on_after(0.001) as c:
+            acon = await sqlite_anyio.connect(adb_path)
+    assert c.cancel_called
     assert acon is not None
 
     with CancelScope() as c:
@@ -118,8 +126,9 @@ async def test_execute_long(acon):
     value = (1000000,)  # Tune this delay for CI
 
     await acur.execute("BEGIN DEFERRED")
-    with move_on_after(0.001):
+    with move_on_after(0.001) as c:
         await acur.execute(command, value)
+    assert c.cancelled_caught
 
     command = """SELECT count(*) FROM foo;"""
     await acur.execute(command)
@@ -137,3 +146,20 @@ async def test_cursor_close(acon):
     with pytest.raises(sqlite3.ProgrammingError) as excinfo:
         res = await acur.execute(command)
     assert str(excinfo.value) == "Cannot operate on a closed cursor."
+
+
+async def test_rollback(acon):
+    acur = await acon.execute("CREATE TABLE foo(bar)")
+    await acon.commit()
+    command = """INSERT INTO foo VALUES
+        (? )
+    """
+    value = (1970,)
+    await acur.execute(command, value)
+
+    with CancelScope() as c:
+        c.cancel()
+        await acon.rollback()
+
+    with pytest.raises(sqlite3.InterfaceError, match="rollback"):
+        await acur.fetchone()  # any cursor method would do

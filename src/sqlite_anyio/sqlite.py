@@ -81,7 +81,7 @@ async def _interruptible_dispatch(
         if len(eg.exceptions) == 1:
             if isinstance(eg.exceptions[0], Exception):
                 raise eg.exceptions[0]
-        raise
+        raise  # pragma: nocover (would be an internal error that should fail other tests)
 
     return retval
 
