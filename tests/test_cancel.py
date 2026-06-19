@@ -1,7 +1,8 @@
 import pytest
 import sqlite3
+import threading
 
-from anyio import CancelScope, move_on_after
+from anyio import CancelScope, create_task_group, move_on_after, wait_all_tasks_blocked
 
 import sqlite_anyio
 
@@ -27,17 +28,25 @@ async def test_connection_and_close(tmp_path_factory, monkeypatch):
     assert not adb_path.exists()
     assert acon is None
 
-    from sqlite3 import connect
-    from time import sleep
+    real_connect = sqlite3.connect
+    proceed = threading.Event()
 
-    def slow_connect(*args, **kwargs):
-        sleep(0.01)
-        return connect(*args, **kwargs)
+    def blocking_connect(*args, **kwargs):
+        proceed.wait()
+        return real_connect(*args, **kwargs)
+
+    async def cancel_when_blocked(scope):
+        await wait_all_tasks_blocked()
+        scope.cancel()
+        proceed.set()
 
     with monkeypatch.context() as m:
-        m.setattr(sqlite3, "connect", slow_connect)
-        with move_on_after(0.001) as c:
-            acon = await sqlite_anyio.connect(adb_path)
+        m.setattr(sqlite3, "connect", blocking_connect)
+        async with create_task_group() as tg:
+            with CancelScope() as c:
+                tg.start_soon(cancel_when_blocked, c)
+                acon = await sqlite_anyio.connect(adb_path)
+
     assert c.cancel_called
     assert acon is not None
 
