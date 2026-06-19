@@ -161,5 +161,5 @@ async def test_rollback(acon):
         c.cancel()
         await acon.rollback()
 
-    with pytest.raises(sqlite3.InterfaceError, match="rollback"):
-        await acur.fetchone()  # any cursor method would do
+    await acur.execute("SELECT count(*) FROM foo")
+    assert await acur.fetchone() == (0,)
