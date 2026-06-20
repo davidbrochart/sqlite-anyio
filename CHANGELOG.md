@@ -1,5 +1,9 @@
 # Version history
 
+## 0.2.9
+
+- Allow queries to be cancelled.
+
 ## 0.2.8
 
 - Return self instead of new cursor.
