@@ -1,0 +1,174 @@
+import pytest
+import sqlite3
+import threading
+
+from anyio import CancelScope, create_task_group, move_on_after, wait_all_tasks_blocked
+
+import sqlite_anyio
+
+
+pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(scope="function")
+async def acon():
+    return await sqlite_anyio.connect(":memory:")
+
+
+async def test_connection_and_close(tmp_path_factory, monkeypatch):
+    dir_path = tmp_path_factory.mktemp("sqlite_cancel")
+    adb_path = dir_path / "asqlite_cancel.db"
+
+    acon = None
+
+    with CancelScope() as c:
+        c.cancel()
+        acon = await sqlite_anyio.connect(adb_path)
+
+    assert not adb_path.exists()
+    assert acon is None
+
+    real_connect = sqlite3.connect
+    proceed = threading.Event()
+
+    def blocking_connect(*args, **kwargs):
+        proceed.wait()
+        return real_connect(*args, **kwargs)
+
+    async def cancel_when_blocked(scope):
+        await wait_all_tasks_blocked()
+        scope.cancel()
+        proceed.set()
+
+    with monkeypatch.context() as m:
+        m.setattr(sqlite3, "connect", blocking_connect)
+        async with create_task_group() as tg:
+            with CancelScope() as c:
+                tg.start_soon(cancel_when_blocked, c)
+                acon = await sqlite_anyio.connect(adb_path)
+
+    assert c.cancel_called
+    assert acon is not None
+
+    with CancelScope() as c:
+        c.cancel()
+        await acon.close()
+    assert c.cancel_called
+
+    with pytest.raises(sqlite3.ProgrammingError) as excinfo:
+        await acon.cursor()
+    assert str(excinfo.value) == "Cannot operate on a closed database."
+
+    # check that there is no lock on the file, especially for Windows where there can be:
+    # PermissionError: [WinError 32] The process cannot access the file because it is being used by another process
+    adb_path.rename(adb_path.with_suffix(".keep"))
+
+
+async def test_execute(acon):
+    command = "CREATE TABLE connums(num)"
+    ares = None
+    with CancelScope() as c:
+        c.cancel()
+        ares = await acon.execute(command)
+    assert ares is None
+    # with move_on_after(.0001) as c:
+    #     ares = await acon.execute(command)
+    # assert ares is None
+
+    command = """SELECT count(*) FROM sqlite_master
+    WHERE type='table' AND name='connums';"""
+    ares = await acon.execute(command)
+    assert await ares.fetchone() == (0,)
+
+    # cursor too
+    acur = ares
+
+    ares = None
+    command = "CREATE TABLE curnums(num)"
+    with CancelScope() as c:
+        c.cancel()
+        ares = await acur.execute(command)
+    assert await acur.fetchone() is None
+
+    command = """SELECT count(*) FROM sqlite_master
+    WHERE type='table' AND name='curnums';"""
+    ares = await acur.execute(command)
+    assert await ares.fetchone() == (0,)
+
+
+async def test_commit(acon):
+    acur = await acon.execute("BEGIN")
+    await acur.execute("CREATE TABLE foo(bar)")
+    await acur.execute("COMMIT")
+
+    command = """    
+        WITH RECURSIVE c(x) AS
+        (VALUES(1) UNION ALL SELECT x+1 FROM c WHERE x < ?)
+        INSERT INTO foo
+        SELECT x FROM c;
+    """
+    value = (10000,)  # Tune this delay for CI
+
+    await acur.execute("BEGIN DEFERRED")
+    await acur.execute(command, value)
+    with CancelScope() as c:
+        c.cancel()
+        await acon.commit()
+    await acon.rollback()
+
+    command = """SELECT count(*) FROM foo;"""
+    await acur.execute(command)
+    assert await acur.fetchone() < value
+
+
+async def test_execute_long(acon):
+    acur = await acon.execute("BEGIN")
+    await acur.execute("CREATE TABLE foo(bar)")
+    await acur.execute("COMMIT")
+
+    command = """    
+        WITH RECURSIVE c(x) AS
+        (VALUES(1) UNION ALL SELECT x+1 FROM c WHERE x < ?)
+        INSERT INTO foo
+        SELECT x FROM c;
+    """
+    value = (1000000,)  # Tune this delay for CI
+
+    await acur.execute("BEGIN DEFERRED")
+    with move_on_after(0.001) as c:
+        await acur.execute(command, value)
+    assert c.cancelled_caught
+
+    command = """SELECT count(*) FROM foo;"""
+    await acur.execute(command)
+    assert await acur.fetchone() < value
+
+
+async def test_cursor_close(acon):
+    acur = await acon.cursor()
+    with CancelScope() as c:
+        c.cancel()
+        await acur.close()
+    assert c.cancel_called
+
+    command = "SELECT title FROM movie"
+    with pytest.raises(sqlite3.ProgrammingError) as excinfo:
+        res = await acur.execute(command)
+    assert str(excinfo.value) == "Cannot operate on a closed cursor."
+
+
+async def test_rollback(acon):
+    acur = await acon.execute("CREATE TABLE foo(bar)")
+    await acon.commit()
+    command = """INSERT INTO foo VALUES
+        (? )
+    """
+    value = (1970,)
+    await acur.execute(command, value)
+
+    with CancelScope() as c:
+        c.cancel()
+        await acon.rollback()
+
+    await acur.execute("SELECT count(*) FROM foo")
+    assert await acur.fetchone() == (0,)
