@@ -1,5 +1,9 @@
 # Version history
 
+## 0.2.10
+
+- Revert previous changes (queries cannot be cancelled anymore).
+
 ## 0.2.9
 
 - Allow queries to be cancelled.
