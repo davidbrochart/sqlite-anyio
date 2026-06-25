@@ -1,5 +1,9 @@
 # Version history
 
+## 0.3.0
+
+- Add support for cancellation again.
+
 ## 0.2.10
 
 - Revert previous changes (queries cannot be cancelled anymore).
