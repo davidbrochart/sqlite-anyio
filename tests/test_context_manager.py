@@ -96,3 +96,17 @@ async def test_exception_logger(anyio_backend, caplog):
             assert i[0] == "Python"
         await acur1.execute("DROP TABLE IF EXISTS lang;")
 
+async def test_exception_handler(anyio_backend, caplog):
+    caplog.set_level(logging.INFO)
+    mem_uri = f"file:{anyio_backend}_mem4?mode=memory&cache=shared"
+   
+    def on_exception(
+        exc_type:type[BaseException], exc, traceback, logger
+    ) -> bool:
+        assert exc.args[0] == "Test"
+        assert exc_type is RuntimeError
+        return True
+
+    async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=on_exception) as acon1:
+        raise RuntimeError("Test")
+
