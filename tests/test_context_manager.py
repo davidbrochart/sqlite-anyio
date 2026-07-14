@@ -73,6 +73,25 @@ async def test_cursor_async_iterator(anyio_backend, caplog):
         async with await acon0.cursor() as acur0:
             await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
             await acur0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
+            async for row in acur0:
+                row[0] == ("Python",)
+
+
+async def test_cursor_async_iterator_simulate_many(anyio_backend, caplog):
+    caplog.set_level(logging.INFO)
+    mem_uri = f"file:{anyio_backend}_mem2?mode=memory&cache=shared"
+    log = logging.getLogger("logger")
+    async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log) as acon0:
+        async with await acon0.cursor() as acur0:
+            await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+            MANY = [(f"Python-{i}",) for i in range(101)]
+            await acur0.executemany("INSERT INTO lang(name) VALUES(?)", MANY)
+        async with await acon0.cursor() as acur1:
+            await acur1.execute("SELECT name FROM lang")
+            async for row in acur1:
+                assert row[0].startswith("Python-")
+
+            
 
  
 
