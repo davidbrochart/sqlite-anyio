@@ -65,15 +65,48 @@ async def test_cursor_context_manager(anyio_backend, caplog):
 
     assert "SQLite exception" in caplog.text
 
+async def test_cursor_async_iterator(anyio_backend, caplog):
+    caplog.set_level(logging.INFO)
+    mem_uri = f"file:{anyio_backend}_mem4?mode=memory&cache=shared"
+    log = logging.getLogger("logger")
+    async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log) as acon0:
+        async with await acon0.cursor() as acur0:
+            await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+            MANY = [(f"Python-{i}",) for i in range(101)]
+            await acur0.executemany("INSERT INTO lang(name) VALUES(?)", MANY)
+        async with await acon0.cursor() as acur1:
+            async for row in await acur1.execute("SELECT name FROM lang"):
+                assert row[0].startswith("Python-")
+            await acur1.execute("DROP TABLE IF EXISTS lang;")
+
+
 
 async def test_exception_logger(anyio_backend, caplog):
     caplog.set_level(logging.INFO)
-    mem_uri = f"file:{anyio_backend}_mem3?mode=memory&cache=shared"
+    mem_uri = f"file:{anyio_backend}_mem4?mode=memory&cache=shared"
     log = logging.getLogger("logger")
     async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log) as acon0:
-        acur0 = await acon0.cursor()
-        await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
-        await acur0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
-        raise RuntimeError("foo")
+        await acon0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+        await acon0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
 
-    assert "SQLite exception" in caplog.text
+    async with await sqlite_anyio.connect(mem_uri, uri=True) as acon1:
+        acur1 = await acon1.cursor()
+        await acur1.execute("SELECT name FROM lang")
+        async for i in acur1:
+            assert i[0] == "Python"
+        await acur1.execute("DROP TABLE IF EXISTS lang;")
+
+async def test_exception_handler(anyio_backend, caplog):
+    caplog.set_level(logging.INFO)
+    mem_uri = f"file:{anyio_backend}_mem4?mode=memory&cache=shared"
+   
+    def on_exception(
+        exc_type:type[BaseException], exc, traceback, logger
+    ) -> bool:
+        assert exc.args[0] == "Test"
+        assert exc_type is RuntimeError
+        return True
+
+    async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=on_exception) as acon1:
+        raise RuntimeError("Test")
+
