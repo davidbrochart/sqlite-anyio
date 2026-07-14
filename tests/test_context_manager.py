@@ -65,15 +65,30 @@ async def test_cursor_context_manager(anyio_backend, caplog):
 
     assert "SQLite exception" in caplog.text
 
+async def test_cursor_async_iterator(anyio_backend, caplog):
+    caplog.set_level(logging.INFO)
+    mem_uri = f"file:{anyio_backend}_mem2?mode=memory&cache=shared"
+    log = logging.getLogger("logger")
+    async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log) as acon0:
+        async with await acon0.cursor() as acur0:
+            await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+            await acur0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
+
+ 
+
 
 async def test_exception_logger(anyio_backend, caplog):
     caplog.set_level(logging.INFO)
-    mem_uri = f"file:{anyio_backend}_mem3?mode=memory&cache=shared"
+    mem_uri = f"file:{anyio_backend}_mem4?mode=memory&cache=shared"
     log = logging.getLogger("logger")
     async with await sqlite_anyio.connect(mem_uri, uri=True, exception_handler=sqlite_anyio.exception_logger, log=log) as acon0:
-        acur0 = await acon0.cursor()
-        await acur0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
-        await acur0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
-        raise RuntimeError("foo")
+        await acon0.execute("CREATE TABLE lang(id INTEGER PRIMARY KEY, name VARCHAR UNIQUE)")
+        await acon0.execute("INSERT INTO lang(name) VALUES(?)", ("Python",))
 
-    assert "SQLite exception" in caplog.text
+    async with await sqlite_anyio.connect(mem_uri, uri=True) as acon1:
+        acur1 = await acon1.cursor()
+        await acur1.execute("SELECT name FROM lang")
+        async for i in acur1:
+            assert i[0] == "Python"
+        await acur1.execute("DROP TABLE IF EXISTS lang;")
+

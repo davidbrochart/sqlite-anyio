@@ -5,6 +5,7 @@ __all__ = ["connect", "Connection", "Cursor"]
 import sqlite3
 import sys
 import threading
+from collections import deque
 from collections.abc import Callable, Sequence
 from functools import partial
 from logging import Logger, getLogger
@@ -13,6 +14,7 @@ from typing import Any, TypeVar
 
 import anyio
 from anyio import to_thread, from_thread
+from anyio.lowlevel import checkpoint
 
 if sys.version_info >= (3, 11):
     from typing import Self, TypeVarTuple, Unpack
@@ -152,6 +154,7 @@ class Cursor:
         self._limiter = limiter
         self._exception_handler = _exception_handler
         self._log = _log
+        self._buffer: deque[sqlite3.Row | Any] = deque()
 
     @property
     def description(self) -> Any:
@@ -210,6 +213,18 @@ class Cursor:
 
     async def fetchall(self) -> list[tuple[Any, ...]]:
         return await _interruptible_dispatch(self, self._real_cursor.fetchall)
+
+    def __aiter__(self) -> Self:
+        return self
+    
+    async def __anext__(self) -> Any | sqlite3.Row:
+        if not self._buffer:
+            self._buffer.extend(await self.fetchmany(100))
+            if not self._buffer:
+                raise StopAsyncIteration
+        else:
+            await checkpoint()
+        return self._buffer.popleft()
 
 
 async def connect(
