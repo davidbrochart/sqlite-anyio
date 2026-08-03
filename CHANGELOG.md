@@ -1,5 +1,9 @@
 # Version history
 
+## 0.3.1
+
+- Allow enabling/disabling cancellation.
+
 ## 0.3.0
 
 - Add support for cancellation again.
