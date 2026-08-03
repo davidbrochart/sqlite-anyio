@@ -1,4 +1,5 @@
 import importlib.metadata
+import sys
 
 from .sqlite import Connection as Connection
 from .sqlite import Cursor as Cursor
@@ -9,3 +10,6 @@ from .sqlite import exception_logger as exception_logger
 
 
 __version__ = importlib.metadata.version("sqlite_anyio")
+
+if sys.platform == "emscripten":
+    disable_cancellation()  # pragma: nocover
