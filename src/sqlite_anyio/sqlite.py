@@ -22,6 +22,17 @@ else:  # pragma: nocover
 
 T_Retval = TypeVar("T_Retval")
 PosArgsT = TypeVarTuple("PosArgsT")
+_cancellation_enabled = True
+
+
+def disable_cancellation() -> None:
+    global _cancellation_enabled
+    _cancellation_enabled = False
+
+
+def enable_cancellation() -> None:
+    global _cancellation_enabled
+    _cancellation_enabled = True
 
 
 async def _interruptible_dispatch(
@@ -29,6 +40,9 @@ async def _interruptible_dispatch(
     func: Callable[[Unpack[PosArgsT]], T_Retval],
     *args: Unpack[PosArgsT]
 ) -> T_Retval:
+    if not _cancellation_enabled:
+        return await to_thread.run_sync(func, *args)
+
     if isinstance(self, Connection):
         real_connection = self._real_connection
     elif isinstance(self, Cursor):
