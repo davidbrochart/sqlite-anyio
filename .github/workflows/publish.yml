@@ -13,10 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: 3.14
-      - run: uv build
+          python-version: 3.x
+      - run: |
+          pip install hatch
+          hatch build
       - uses: actions/upload-artifact@v7
         with:
           name: dist
