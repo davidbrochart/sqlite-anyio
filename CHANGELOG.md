@@ -1,5 +1,9 @@
 # Version history
 
+## 0.3.2
+
+- Use `hatchling` for the build system.
+
 ## 0.3.1
 
 - Allow enabling/disabling cancellation.
